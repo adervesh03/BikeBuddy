@@ -5,28 +5,43 @@ import yolov5
 import ollama
 import time
 import warnings
+import threading
+import queue
 
 warnings.filterwarnings('ignore', category=FutureWarning)
+
+# Create queues for thread communication
+description_queue = queue.Queue(maxsize=1)  # Only store latest description
+response_queue = queue.Queue()
+
+def ai_thread():
+    """Thread function for AI processing"""
+    while True:
+        try:
+            description = description_queue.get(timeout=1.0)
+            response = ollama.generate('deepseek-r1:1.5b', description)
+            response_queue.put(response['response'])
+            description_queue.task_done()
+        except queue.Empty:
+            continue
+        except Exception as e:
+            print(f"AI thread error: {e}")
+
+# Start AI thread
+ai_thread = threading.Thread(target=ai_thread, daemon=True)
+ai_thread.start()
 
 model = yolov5.load('yolov5s.pt')
 
 # Initialize webcam
-cap = cv2.VideoCapture(0)  # Use default webcam (0)
+cap = cv2.VideoCapture("bikeVideo.mov")  # Use default webcam (0)
 
 # initialize variables
 last_inference_time = time.time()
-frame_count = 0
-people_detected = 0
-bicycles_detected = 0
-cars_detected = 0
-motorcycles_detected = 0
 
 while True:
     # Read frame
     ret, frame = cap.read()
-
-    # update frame count
-    
 
     if not ret:
         break
@@ -39,19 +54,6 @@ while True:
     boxes = predictions[:, :4] # x1, y1, x2, y2
     scores = predictions[:, 4]
     categories = predictions[:, 5]
-
-    # update object count
-    # get the number of people detected
-    people_detected = len([category for category in categories if category == 0])
-    # get the number of bicycles detected
-    bicycles_detected = len([category for category in categories if category == 1])
-    # get the number of cars detected
-    cars_detected = len([category for category in categories if category == 2])
-    # get the number of motorcycles detected
-    motorcycles_detected = len([category for category in categories if category == 3])
-
-    user_prompt = f"Number of people detected: {people_detected}\nNumber of bicycles detected: {bicycles_detected}\nNumber of cars detected: {cars_detected}\nNumber of motorcycles detected: {motorcycles_detected}"
-    cv2.putText(frame, user_prompt, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
     current_time = time.time()
     description = "Detected objects:\n"
@@ -80,12 +82,18 @@ while True:
         description += "Generate a short one sentence summary notifying the rider of each object around them. For example: There is a bicycle on your left, or there is a car on your right, or there is a person in front of you."
         description += "If there are no objects of a category detected, do not include that category in the summary."
         
-        # Pass text to ollama model
-        response = ollama.generate('deepseek-r1:1.5b', description)
-        #cv2.putText(frame, response, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2, cv2.LINE_AA)
-
-        print(response['response'])
+        # Only add if queue is empty to avoid backlog
+        if description_queue.empty():
+            description_queue.put(description)
         last_inference_time = current_time
+
+    # Check for AI responses
+    try:
+        response = response_queue.get_nowait()
+        print(response)
+        response_queue.task_done()
+    except queue.Empty:
+        pass
     
     # Show frame
     cv2.imshow('YOLOv5 Detection', frame)
