@@ -2,12 +2,17 @@ import cv2
 import torch
 import matplotlib.pyplot as plt
 from ultralytics import YOLO
+import os
+import pyttsx3  # Import pyttsx3 for text-to-speech
 
 # Load YOLOv8 model
 model = YOLO('yolov8n.pt')
 
 # Initialize camera
 cap = cv2.VideoCapture(0)
+
+# Initialize text-to-speech engine
+engine = pyttsx3.init()
 
 if not cap.isOpened():
     print("Error: Could not open camera")
@@ -34,7 +39,14 @@ try:
         plt.clf()  # Clear the figure for the next frame
 
         # Print detected objects
-        print(results[0].boxes.xyxy.tolist())
+        detected_objects = results[0].boxes.xyxy.tolist()
+        print(detected_objects)
+
+        # Convert detection results to text and speak
+        if detected_objects:
+            detected_text = "Detected objects: " + ", ".join([str(obj) for obj in detected_objects])
+            engine.say(detected_text)
+            engine.runAndWait()
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
