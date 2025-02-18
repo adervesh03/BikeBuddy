@@ -1,35 +1,51 @@
-import cv2
-import threading 
+import threading
 import queue
+import time
+import cv2
 
 class CameraThread:
-    def __init__(self, cameraIndices, queue_size=500): 
-        self.cameraIndices = cameraIndices
-        self.frame_queue = queue.Queue(maxsize=queue_size)
+    def __init__(self, cameraIndex):
+        self.cameraIndex = cameraIndex
+        self.frame_queue = queue.Queue()
+        self.stop_event = threading.Event()  # Used to stop the loop
         self.threads = []
-        self.running = True
-        
-    def capture_frames(self, cameraIndex): 
-        cap = cv2.VideoCapture(cameraIndex)
+
+    def startCameras(self):
+        thread = threading.Thread(target=self.capture_frames, args=(self.cameraIndex,))
+        thread.start()
+        self.threads.append(thread)
+
+    def stopCameras(self):
+        print("Stopping cameras...")
+        self.stop_event.set()  # Signal all threads to stop
+        for thread in self.threads:
+            thread.join()  # Wait for them to exit
+        print("Cameras stopped.")
+
+    def capture_frames(self, cameraIndex):
+        print(f"Thread started for camera {cameraIndex}")
+        cap = cv2.VideoCapture(cameraIndex)  # Open the camera
+
         if not cap.isOpened():
-            print(f"Error: Camera {cameraIndex} could not be opened.")
+            print(f"ERROR: Camera {cameraIndex} failed to open")
             return
-        
-        while self.running: 
+
+        while not self.stop_event.is_set():  # Stop when event is set
             ret, frame = cap.read()
-            if ret:
-                if self.frame_queue.full():
-                    self.frame_queue.get_nowait()  # Remove the oldest frame to avoid blocking
-                self.frame_queue.put(frame)  # Add the new frame
-            else: 
-                print(f"Error reading frame from camera {cameraIndex}")
-                break
-        
-        cap.release()
-        print(f'Camera {cameraIndex} capture stopped')
+            if not ret:
+                print("ERROR: Failed to grab frame!")
+                continue
+
+            print(f"Frame captured from camera {cameraIndex}, type: {type(frame)}")
+            self.frame_queue.put(frame)
+            time.sleep(1)  # Simulate a 1-second frame rate
+
+        print(f"Thread for camera {cameraIndex} stopping.")
+        cap.release()  # Release the camera when stopping
+
         
     def startCameras(self): 
-        for cameraIndex in self.cameraIndices:
+        for cameraIndex in self.cameraIndex:
             thread = threading.Thread(target=self.capture_frames, args=(cameraIndex,))
             self.threads.append(thread)
             thread.start()
@@ -45,6 +61,8 @@ class CameraThread:
     def getFrames(self):
         """Retrieve the latest frame from the queue if available."""
         if not self.frame_queue.empty():
-            return self.frame_queue.get()  # Return the next available frame
+            item = self.frame_queue.get()
+            print(f"Retrived frame {item} from queue")
+            return item  # Return the next available frame
         return None  # Return None if no frame is available
  
