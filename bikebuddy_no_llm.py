@@ -11,28 +11,6 @@ import subprocess
 
 warnings.filterwarnings('ignore', category=FutureWarning)
 
-# Create queues for thread communication
-description_queue = queue.Queue(maxsize=1)  # Only store latest description
-response_queue = queue.Queue()
-
-
-def ai_thread():
-    """Thread function for AI processing"""
-    while True:
-        try:
-            description = description_queue.get(timeout=1.0)
-            response = ollama.generate('gemma3:4b', description)
-            response_queue.put(response['response'])
-            description_queue.task_done()
-        except queue.Empty:
-            continue
-        except Exception as e:
-            print(f"AI thread error: {e}")
-
-# Start AI thread
-ai_thread = threading.Thread(target=ai_thread, daemon=True)
-ai_thread.start()
-
 model = yolov5.load('yolov5s.pt')
 
 # Initialize webcam
@@ -77,29 +55,18 @@ while True:
             # update text description of objects in frame
             x1, y1, x2, y2 = box
             print(f"{results.names[int(category)]} at ({x1}, {y1}, {x2}, {y2}) with confidence {score:.2f}")
-            description += f"{results.names[int(category)]} at ({x1}, {y1}, {x2}, {y2}) with confidence {score:.2f}\n"
+            # description += f"{results.names[int(category)]} at ({x1}, {y1}, {x2}, {y2}) with confidence {score:.2f}\n"
 
     # Pass frame to ollama model once every second
     if current_time - last_inference_time >= 1:
-        description += "tell me if the object is to the left, right, or middle. nothing more, nothing less."
+        description += "Based on only the objects provided, generate a short singular sentence for each object."
         # description += "The bounding boxes and coordinates do not represent absolute position, but are relative to the frame's dimensions. The confidence score indicates the model's confidence in the object's classification."
         # description += "You should use this information knowing that the position of each object is relative to the rider's position and orientation."
         # description += "You are to generate a short one sentence summary notifying the rider of each object around them. For example: There is a bicycle on your left, or there is a car on your right, or there is a person in front of you."
         # description += "If there are no objects of a category detected, do not include that category in the summary."
         # description += "Your answer needs to be short, concise, and limited to one sentence as if they were spoken. Do not include any explanations of the objects or any additional information."
         
-        # Only add if queue is empty to avoid backlog
-        if description_queue.empty():
-            description_queue.put(description)
         last_inference_time = current_time
-
-    # Check for AI responses
-    try:
-        response = response_queue.get_nowait()
-        print(response)
-        response_queue.task_done()
-    except queue.Empty:
-        pass
     
     # Show frame
     cv2.imshow('YOLOv5 Detection', frame)
