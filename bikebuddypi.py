@@ -35,7 +35,6 @@ try:
         print(detected_objects)
 
         # Convert detection results to text and speak
-        # Convert detection results to text
         detected_text = "Detected objects: " + ", ".join([f"Object at {obj}" for obj in detected_objects])
 
         # Use gTTS to convert text to speech
