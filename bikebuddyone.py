@@ -76,6 +76,10 @@ last_announcement = ""
 last_announcement_time = 0
 announcement_cooldown = 3  # seconds
 
+# Add frame counter for detection frequency control
+frame_counter = 0
+DETECTION_FREQUENCY = 10  # Only detect objects every 15 frames
+
 try:
     while cap.isOpened():
         try:
@@ -88,79 +92,84 @@ try:
             if frame.size == 0:
                 print("Error: Empty frame received")
                 continue
-                
-            # Get frame dimensions
-            height, width = frame.shape[:2]
             
-            # Calculate cell dimensions
-            cell_width = width / GRID_COLS
-            cell_height = height / GRID_ROWS
-
-            # Run YOLO inference with error handling
-            try:
-                results = model(frame, verbose=False)
-                detected_objects = []
+            # Increment frame counter
+            frame_counter += 1
+            
+            # Only process every DETECTION_FREQUENCY frames
+            if frame_counter % DETECTION_FREQUENCY == 0:
+                # Get frame dimensions
+                height, width = frame.shape[:2]
                 
-                # Check if results contain boxes
-                if hasattr(results[0], 'boxes') and hasattr(results[0].boxes, 'xyxy'):
-                    detected_objects = results[0].boxes.xyxy.cpu().numpy().tolist()
-                print(f"Detected {len(detected_objects)} objects")
-            except Exception as e:
-                print(f"Inference error: {e}")
-                continue
+                # Calculate cell dimensions
+                cell_width = width / GRID_COLS
+                cell_height = height / GRID_ROWS
 
-            # Only process cars, pedestrians, and bicycles
-            relevant_classes = [0, 1, 2]  # person, bicycle, car
-            filtered_boxes = []
-            filtered_indices = []
-
-            for idx, box in enumerate(detected_objects):
+                # Run YOLO inference with error handling
                 try:
-                    class_id = int(results[0].boxes.cls[idx].item())
-                    if class_id in relevant_classes:
-                        filtered_boxes.append(box)
-                        filtered_indices.append(idx)
+                    results = model(frame, verbose=False)
+                    detected_objects = []
+                    
+                    # Check if results contain boxes
+                    if hasattr(results[0], 'boxes') and hasattr(results[0].boxes, 'xyxy'):
+                        detected_objects = results[0].boxes.xyxy.cpu().numpy().tolist()
+                    #print(f"Detected {len(detected_objects)} objects")
                 except Exception as e:
-                    print(f"Error processing detection {idx}: {e}")
+                    print(f"Inference error: {e}")
+                    continue
 
-            # If there's a detected object in the frame pass the object to deepseek and get the description
-            if filtered_boxes:
-                # Process each detected object
-                for idx, box in enumerate(filtered_boxes):
+                # Only process cars, pedestrians, and bicycles
+                relevant_classes = [0, 1, 2]  # person, bicycle, car
+                filtered_boxes = []
+                filtered_indices = []
+
+                for idx, box in enumerate(detected_objects):
                     try:
-                        x1, y1, x2, y2 = box
-                        
-                        # Calculate grid cells that contain this object
-                        start_col = max(0, min(GRID_COLS - 1, int(x1 / cell_width)))
-                        end_col = max(0, min(GRID_COLS - 1, int(x2 / cell_width)))
-                        start_row = max(0, min(GRID_ROWS - 1, int(y1 / cell_height)))
-                        end_row = max(0, min(GRID_ROWS - 1, int(y2 / cell_height)))
-                        
-                        # Get object class if available
-                        class_id = int(results[0].boxes.cls[filtered_indices[idx]].item())
-                        class_name = results[0].names[class_id]
-                        
-                        # Generate grid cell list
-                        grid_cells = []
-                        for r in range(start_row, end_row + 1):
-                            for c in range(start_col, end_col + 1):
-                                grid_cells.append(f"({r},{c})")
-                        
-                        # Print grid information
-                        print(f"{class_name} detected in grid cells: {', '.join(grid_cells)}")
-                        
-                        # Announce the detected object with debouncing
-                        current_time = time.time()
-                        announcement = f"{class_name} detected"
-                        if (announcement != last_announcement or 
-                            current_time - last_announcement_time > announcement_cooldown):
-                            speak_text(announcement)
-                            last_announcement = announcement
-                            last_announcement_time = current_time
-                            
+                        class_id = int(results[0].boxes.cls[idx].item())
+                        if class_id in relevant_classes:
+                            filtered_boxes.append(box)
+                            filtered_indices.append(idx)
                     except Exception as e:
-                        print(f"Error processing object {idx}: {e}")
+                        print(f"Error processing detection {idx}: {e}")
 
+                # If there's a detected object in the frame pass the object to deepseek and get the description
+                if filtered_boxes:
+                    # Process each detected object
+                    for idx, box in enumerate(filtered_boxes):
+                        try:
+                            x1, y1, x2, y2 = box
+                            
+                            # Calculate grid cells that contain this object
+                            start_col = max(0, min(GRID_COLS - 1, int(x1 / cell_width)))
+                            end_col = max(0, min(GRID_COLS - 1, int(x2 / cell_width)))
+                            start_row = max(0, min(GRID_ROWS - 1, int(y1 / cell_height)))
+                            end_row = max(0, min(GRID_ROWS - 1, int(y2 / cell_height)))
+                            
+                            # Get object class if available
+                            class_id = int(results[0].boxes.cls[filtered_indices[idx]].item())
+                            class_name = results[0].names[class_id]
+                            
+                            # Generate grid cell list
+                            grid_cells = []
+                            for r in range(start_row, end_row + 1):
+                                for c in range(start_col, end_col + 1):
+                                    grid_cells.append(f"({r},{c})")
+                            
+                            # Print grid information
+                            print(f"{class_name} detected in grid cells: {', '.join(grid_cells)}")
+                            
+                            # Announce the detected object with debouncing
+                            current_time = time.time()
+                            announcement = f"{class_name} detected"
+                            if (announcement != last_announcement or 
+                                current_time - last_announcement_time > announcement_cooldown):
+                                speak_text(announcement)
+                                last_announcement = announcement
+                                last_announcement_time = current_time
+                                
+                        except Exception as e:
+                            print(f"Error processing object {idx}: {e}")
+            
             # Show the frame with detections if needed
             # cv2.imshow('BikeBuddy Detection', frame)
             
