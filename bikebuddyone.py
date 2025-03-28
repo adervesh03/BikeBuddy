@@ -6,6 +6,8 @@ import sys
 import subprocess
 import tempfile
 import numpy as np
+import requests
+import json
 from gtts import gTTS
 from ultralytics import YOLO
 
@@ -33,6 +35,38 @@ def speak_text(text):
         os.remove(temp_filename)
     except Exception as e:
         print(f"Text-to-speech error: {e}")
+
+# Function to query Ollama model for instructions
+def query_ollama(prompt, model="gemma3:1b"):
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": model,
+                "prompt": prompt,
+                "stream": False
+            }
+        )
+        if response.status_code == 200:
+            return response.json()["response"].strip()
+        else:
+            print(f"Ollama API error: {response.status_code}")
+            return "Move away from danger."
+    except Exception as e:
+        print(f"Ollama query error: {e}")
+        return "Move away from danger."
+
+# Function to get LLM-generated instructions based on grid information
+def get_avoidance_instructions(object_name, grid_info):
+    prompt = f"""
+    You are a bicycle safety assistant. A {object_name} has been detected in the following grid positions 
+    of the camera view (grid is 6x6, with rows 0-5 and columns 0-3 being LEFT side and columns 3-5 being RIGHT side):
+    {grid_info}
+    
+    The bottom center (rows 4-5, columns 2-3) is directly in front of the cyclist.
+    Provide a short, clear instruction (10 words or less) to help the cyclist avoid the {object_name}.
+    """
+    return query_ollama(prompt)
 
 # Load YOLO model
 try:
@@ -105,6 +139,11 @@ try:
                     
                     print(f"{class_name} detected in grid cells: {grid_cells}")
                     
+                    # Use LLM to generate avoidance instructions
+                    instruction = get_avoidance_instructions(class_name, grid_cells)
+                    warnings.append((class_name, instruction))
+                    
+                    '''
                     for cell in grid_cells:
                         if cell in WARNING_ZONE:
                             warnings.append((class_name, "Move left or right!"))
@@ -112,6 +151,8 @@ try:
                             warnings.append((class_name, "Move right!"))
                         elif cell in RIGHT_ZONE:
                             warnings.append((class_name, "Move left!"))
+                    '''
+
                 except Exception as e:
                     print(f"Error processing detection {idx}: {e}")
             
