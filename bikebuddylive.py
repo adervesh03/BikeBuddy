@@ -61,7 +61,7 @@ while True:
     description = "Detected objects:\n"
     
     for box, score, category in zip(boxes, scores, categories):
-        if score > 0.6:  # Confidence threshold
+        if score > 0.7:  # Confidence threshold
             # draw bounding boxes
             x1, y1, x2, y2 = box
             cv2.rectangle(frame, 
@@ -74,19 +74,26 @@ while True:
             cv2.putText(frame, label, (int(x1), int(y1-10)), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             
+            # determine if the object is in the left, right, or middle zone
+            width = frame.shape[1]
+            
+            center_x = (x1 + x2) / 2
+            center_y = (y1 + y2) / 2
+
+            if center_x < width / 3:
+                zone = "left"
+            elif center_x > 2 * width / 3:
+                zone = "right"
+            else:
+                zone = "middle"
+
             # update text description of objects in frame
-            x1, y1, x2, y2 = box
-            print(f"{results.names[int(category)]} at ({x1}, {y1}, {x2}, {y2}) with confidence {score:.2f}")
-            description += f"{results.names[int(category)]} at ({x1}, {y1}, {x2}, {y2}) with confidence {score:.2f}\n"
+            print(f"{results.names[int(category)]} is in zone ({zone}) at ({x1}, {y1}, {x2}, {y2})\n")
+            description += f"{results.names[int(category)]} is in zone ({zone}) at ({x1}, {y1}, {x2}, {y2})\n"
 
     # Pass frame to ollama model once every second
     if current_time - last_inference_time >= 1:
-        description += "tell me if the object is to the left, right, or middle. nothing more, nothing less."
-        # description += "The bounding boxes and coordinates do not represent absolute position, but are relative to the frame's dimensions. The confidence score indicates the model's confidence in the object's classification."
-        # description += "You should use this information knowing that the position of each object is relative to the rider's position and orientation."
-        # description += "You are to generate a short one sentence summary notifying the rider of each object around them. For example: There is a bicycle on your left, or there is a car on your right, or there is a person in front of you."
-        # description += "If there are no objects of a category detected, do not include that category in the summary."
-        # description += "Your answer needs to be short, concise, and limited to one sentence as if they were spoken. Do not include any explanations of the objects or any additional information."
+        description += "Tell me how to avoid the object based on its position. Nothing more, nothing less."
         
         # Only add if queue is empty to avoid backlog
         if description_queue.empty():
