@@ -59,11 +59,9 @@ def query_ollama(prompt, model="gemma3:1b"):
 # Function to get LLM-generated instructions based on grid information
 def get_avoidance_instructions(object_name, grid_info):
     prompt = f"""
-    You are a bicycle safety assistant. A {object_name} has been detected in the following grid positions 
-    of the camera view (grid is 6x6, with rows 0-5 and columns 0-3 being LEFT side and columns 3-5 being RIGHT side):
+    You are a bicycle safety assistant. A {object_name} has been detected in the following zone:
     {grid_info}
     
-    The bottom center (rows 4-5, columns 2-3) is directly in front of the cyclist.
     Provide a short, clear instruction (10 words or less) to help the cyclist avoid the {object_name}.
     """
     return query_ollama(prompt)
@@ -134,13 +132,28 @@ try:
                     x1, y1, x2, y2 = box
                     start_col, end_col = int(x1 / cell_width), int(x2 / cell_width)
                     start_row, end_row = int(y1 / cell_height), int(y2 / cell_height)
+                    
+                    width = frame.shape[1]
+
+                    center_x = (int(x1 + x2) / 2)
+                    center_y = (int(y1 + y2) / 2)
+
+                    zone = "middle"
+
+                    if center_x < width / 3:
+                        zone = "left"
+                    elif center_x > 2 * width / 3:
+                        zone = "right"
+                    else:
+                        zone = "middle"
+
                     grid_cells = [(r, c) for r in range(start_row, end_row + 1) for c in range(start_col, end_col + 1)]
                     class_name = relevant_classes[class_id]
                     
-                    print(f"{class_name} detected in grid cells: {grid_cells}")
+                    print(f"{class_name} detected in zone: {zone}")
                     
                     # Use LLM to generate avoidance instructions
-                    instruction = get_avoidance_instructions(class_name, grid_cells)
+                    instruction = get_avoidance_instructions(class_name, zone)
                     warnings.append((class_name, instruction))
                     
                     '''
