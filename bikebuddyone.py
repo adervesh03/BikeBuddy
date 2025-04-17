@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import cv2
 import torch
 import time
@@ -98,9 +100,15 @@ DETECTION_FREQUENCY = 8
 announcement_cooldown = 3
 last_announcement = ""
 last_announcement_time = 0
+stop_file_path = "/home/bikebuddy/BikeBuddy/stop_yolo.txt"
 
 try:
     while cap.isOpened():
+        # Check for stop file
+        if os.path.exists(stop_file_path):
+            print("Stop file detected. Stopping YOLOv8 script.")
+            break
+            
         ret, frame = cap.read()
         if not ret or frame is None:
             print("Error: Can't receive frame")
@@ -153,10 +161,9 @@ try:
                     print(f"{class_name} detected in zone: {zone}")
                     
                     # Use LLM to generate avoidance instructions
-                    instruction = get_avoidance_instructions(class_name, zone)
-                    warnings.append((class_name, instruction))
+                    # instruction = get_avoidance_instructions(class_name, zone)
+                    # warnings.append((class_name, instruction))
                     
-                    '''
                     for cell in grid_cells:
                         if cell in WARNING_ZONE:
                             warnings.append((class_name, "Move left or right!"))
@@ -164,7 +171,6 @@ try:
                             warnings.append((class_name, "Move right!"))
                         elif cell in RIGHT_ZONE:
                             warnings.append((class_name, "Move left!"))
-                    '''
 
                 except Exception as e:
                     print(f"Error processing detection {idx}: {e}")
